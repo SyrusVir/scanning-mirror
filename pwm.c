@@ -28,6 +28,7 @@ int main()
 	}
 
 	gpioSleep(0,30,1000); //sleep for 30 seconds and 1000 microseconds.
+	gpioHardwarePWM(PWM_PIN,0,0); //turn off PWM
 	gpioTerminate();
 	return 0;
 }
