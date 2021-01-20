@@ -7,9 +7,27 @@
 #define PWM_PIN 18
 #define HW_PWM_RANGE 1000000
 
-int main()
+int main(int argc, char *argv[]) //usage: ./pwm [PWM frequency] [seconds to run] [additional microseconds to run]
 {
 	unsigned target_freq = 400;
+	int run_time_sec = 30;
+	int run_time_usec = 1000;
+
+	if argc > 1
+	{
+		target_freq = atoi(argv[1]);
+		if argc > 2
+		{
+			run_time_sec = atoi(argv[2]);
+			if argc > 3
+			{
+				run_time_usec = atoi(argv[3]);
+			}
+		}
+		
+
+	}
+
 
 	if(gpioInitialise() < 0) //returns version number on success; defaults to 5us sample rate. Effects available PWM frequencies
 	{
@@ -27,7 +45,7 @@ int main()
 		return 1;
 	}
 
-	gpioSleep(0,30,1000); //sleep for 30 seconds and 1000 microseconds.
+	gpioSleep(PI_TIME_RELATIVE,30,1000); //sleep for 30 seconds and 1000 microseconds.
 	gpioHardwarePWM(PWM_PIN,0,0); //turn off PWM
 	gpioTerminate();
 	return 0;
