@@ -13,13 +13,13 @@ int main(int argc, char *argv[]) //usage: ./pwm [PWM frequency] [seconds to run]
 	int run_time_sec = 30;
 	int run_time_usec = 1000;
 
-	if argc > 1
+	if (argc > 1)
 	{
 		target_freq = atoi(argv[1]);
-		if argc > 2
+		if (argc > 2)
 		{
 			run_time_sec = atoi(argv[2]);
-			if argc > 3
+			if (argc > 3)
 			{
 				run_time_usec = atoi(argv[3]);
 			}
@@ -45,7 +45,7 @@ int main(int argc, char *argv[]) //usage: ./pwm [PWM frequency] [seconds to run]
 		return 1;
 	}
 
-	gpioSleep(PI_TIME_RELATIVE,30,1000); //sleep for 30 seconds and 1000 microseconds.
+	gpioSleep(PI_TIME_RELATIVE,run_time_sec,run_time_usec); //sleep for 30 seconds and 1000 microseconds.
 	gpioHardwarePWM(PWM_PIN,0,0); //turn off PWM
 	gpioTerminate();
 	return 0;
