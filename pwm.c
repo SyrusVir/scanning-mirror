@@ -27,6 +27,7 @@ int main()
 		return 1;
 	}
 
+	gpioSleep(0,30,1000); //sleep for 30 seconds and 1000 microseconds.
 	gpioTerminate();
 	return 0;
 }
