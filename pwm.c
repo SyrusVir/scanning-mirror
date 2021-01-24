@@ -58,12 +58,13 @@ int main(int argc, char *argv[]) //usage: ./pwm [PWM frequency] [seconds to run]
 	//gpioSleep(PI_TIME_RELATIVE,run_time_sec,run_time_usec); //sleep for 30 seconds and 1000 microseconds.
 	int sec;
 	int usec;
+	char ch;
 	gpioTime(PI_TIME_RELATIVE, &sec, &usec);
 	int stop_sec = sec + run_time_sec;
 	while (sec < stop_sec)
 	{
 		ch = getch();
-		if (toupper(ch) = 'Q') //early termination if 'q' is pressed
+		if (toupper(ch) == 'Q') //early termination if 'q' is pressed
 		{
 			endwin(); //restore terminal configuration
 			break;
