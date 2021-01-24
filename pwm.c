@@ -1,6 +1,8 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<errno.h>
+#include<curses.h>
+#include<ctype.h>
 
 #include<pigpio.h>
 
@@ -10,10 +12,17 @@
 
 int main(int argc, char *argv[]) //usage: ./pwm [PWM frequency] [seconds to run] [additional microseconds to run]
 {
+	//terminal manipulations for non-blocking getch()
+	initscr();
+	nodelay(stdscr,true);
+	noecho();
+
+	//default variables
 	unsigned target_freq = 400;
 	int run_time_sec = 30;
 	int run_time_usec = 1000;
 
+	//parse command line arguments
 	if (argc > 1)
 	{
 		target_freq = atoi(argv[1]);
@@ -25,11 +34,9 @@ int main(int argc, char *argv[]) //usage: ./pwm [PWM frequency] [seconds to run]
 				run_time_usec = atoi(argv[3]);
 			}
 		}
-
-
 	}
 
-
+	//GPIO Routines
 	if(gpioInitialise() < 0) //returns version number on success; defaults to 5us sample rate. Effects available PWM frequencies
 	{
 		return 1;
@@ -47,17 +54,23 @@ int main(int argc, char *argv[]) //usage: ./pwm [PWM frequency] [seconds to run]
 	}
 	
 	gpioWrite(OUT_PIN,1);
-	gpioSleep(PI_TIME_RELATIVE,run_time_sec,run_time_usec); //sleep for 30 seconds and 1000 microseconds.
-	/** int sec;
+	
+	//gpioSleep(PI_TIME_RELATIVE,run_time_sec,run_time_usec); //sleep for 30 seconds and 1000 microseconds.
+	int sec;
 	int usec;
 	gpioTime(PI_TIME_RELATIVE, &sec, &usec);
 	int stop_sec = sec + run_time_sec;
 	while (sec < stop_sec)
 	{
+		ch = getch();
+		if (toupper(ch) = 'Q') //early termination if 'q' is pressed
+		{
+			endwin(); //restore terminal configuration
+			break;
+		} 
 		gpioTime(PI_TIME_RELATIVE, &sec, &usec);
-		if (_
 	}
-**/
+	
 	gpioHardwarePWM(PWM_PIN,0,0); //turn off PWM
 	gpioWrite(OUT_PIN,0);
 
