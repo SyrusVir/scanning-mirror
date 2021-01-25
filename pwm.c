@@ -52,9 +52,9 @@ int main(int argc, char *argv[]) //usage: ./pwm [PWM frequency] [seconds to run]
 	{
 		return 1;
 	}
-	
+
 	gpioWrite(OUT_PIN,1);
-	
+
 	//gpioSleep(PI_TIME_RELATIVE,run_time_sec,run_time_usec); //sleep for 30 seconds and 1000 microseconds.
 	int sec;
 	int usec;
@@ -66,15 +66,15 @@ int main(int argc, char *argv[]) //usage: ./pwm [PWM frequency] [seconds to run]
 		ch = getch();
 		if (toupper(ch) == 'Q') //early termination if 'q' is pressed
 		{
-			endwin(); //restore terminal configuration
 			break;
-		} 
+		}
 		gpioTime(PI_TIME_RELATIVE, &sec, &usec);
 	}
-	
+
 	gpioHardwarePWM(PWM_PIN,0,0); //turn off PWM
 	gpioWrite(OUT_PIN,0);
 
 	gpioTerminate();
+	endwin(); //restore terminal configuration
 	return 0;
 }
