@@ -9,15 +9,10 @@ uint8_t diableMirror(mirror_t m) {
 }
 
 uint8_t setMirrorRPM(mirror_t m, uint16_t rpm) {
-    if (rpm < 1000 || rpm > 4000) {
-        printf("%u RPM provided. GECKO-FOUR mirror supports RPM's in range 1000 to 4000.\n", rpm);
-        if (rpm < 1000) {
-            rpm = 1000;
-            printf("RPM set to %u RPM\n",rpm);
-        }
-        else {
-            rpm = 4000;
-            printf("RPM set to %u RPM\n",rpm);
+    if (rpm > 4000) {
+        printf("%u RPM provided. GECKO-FOUR mirror recommends RPM's in range 1000 to 4000.\n", rpm);
+        rpm = 4000;
+        printf("RPM set to %u RPM\n",rpm);
         }
     }
     unsigned int freq = rpm/60*24; //equation provided in mirror docs
