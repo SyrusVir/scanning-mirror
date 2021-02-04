@@ -1,2 +1,6 @@
 *.txt
 *.csv
+experiment*
+*.a
+*.o
+Makefile
