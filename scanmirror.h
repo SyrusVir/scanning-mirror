@@ -7,8 +7,9 @@ typedef struct Mirror {
     int ATSPEED_PIN;
 } mirror_t;
 
-int configMirror(mirror_t mirror);
-int enableMirror(mirror_t mirror);
-int disableMirror(mirror_t mirror);
-int setMirrorRPM(mirror_t mirror, uint16_t rpm);
-int checkMirrorAtSpeed(mirror_t mirror);
+int mirrorConfig(mirror_t m);
+int mirrorEnable(mirror_t m);
+int mirrorDisable(mirror_t m);
+int mirrorSetRPM(mirror_t m, uint16_t rpm);
+int mirrorCheckAtSpeed(mirror_t m);
+
