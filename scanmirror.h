@@ -1,7 +1,7 @@
 #include <pigpio.h>
 #include <stdint.h>
 
-#define MIRROR_FULL_DUTY 1000000
+unsigned int const MIRROR_FULL_DUTY = 1000000;
 typedef struct Mirror {
     uint8_t FREQ_PIN;
     uint8_t ENABLE_PIN;

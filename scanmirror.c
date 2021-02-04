@@ -1,4 +1,11 @@
 #include <scanmirror.h>
+#include <stdio.h>
+
+uint8_t configMirror(mirror_t m) {
+    gpioSetMode(m.ENABLE_PIN, PI_OUTPUT);
+    gpioSetMode(m.ATSPEED_PIN, PI_INPUT);
+    gpioSetMode(m.FREQ_PIN, PI_ALT5);
+}
 
 uint8_t enableMirror(mirror_t m) {
     return gpioWrite(m.ENABLE_PIN,0);
@@ -20,5 +27,5 @@ uint8_t setMirrorRPM(mirror_t m, uint16_t rpm) {
 
 uint8_t checkMirrorAtSpeed(mirror_t m) {
     /**Returns 1 if mirror is at desired speed and 0 if not. **/
-    return 1 - gpioRead(m.ATSPEED_PIN); //1 - because atspeed pin is LOW when at speed
+    return 1 - gpioRead(m.ATSPEED_PIN); //atspeed pin is LOW when at speed
 }
