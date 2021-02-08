@@ -47,7 +47,7 @@ int mirrorSetRPM(mirror_t m, uint16_t rpm) {
         rpm = 4000;
         printf("RPM set to %u RPM\n",rpm);
         }
-    unsigned int freq = rpm / 60 * 24; //equation provided in mirror docs
+    unsigned int freq = rpm / 60.0 * 24; //equation provided in mirror docs
     return gpioHardwarePWM(m.FREQ_PIN,freq,(unsigned)MIRROR_FULL_DUTY/2);
 }
 
