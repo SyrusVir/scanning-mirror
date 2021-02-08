@@ -1,14 +1,14 @@
 #include <stdio.h>
 #include <time.h>
+#include <stdlib.h>
 
-int main() {
-	int a = 5;
-	char msg[] = "The message is %d\n";
-	printf(msg,a);
-	time_t t;
-	time(&t);
-	strftime(msg,20,"%Y_%m_%d_%H_%M_%S\n",localtime(&t));
-	printf(msg);
+int main(int argc, char* argv[]) {
+	int num = 0;
+	if (argc > 1) {
+		num = atoi(argv[1]);
+	}
+	int out = num / 60.0 * 24;
+	printf("%d\n", out);
 	
 	return 0;
 }
