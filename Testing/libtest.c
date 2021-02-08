@@ -35,6 +35,7 @@ int main(int argc, char *argv[]) //usage: ./pwm [mirror RPM] [seconds to run] [a
 	if (argc > 1)
 	{
 		target_rpm = atoi(argv[1]);
+		printf("freq = %u\n\r", (uint16_t)(target_rpm*24.0/60));
 		if (argc > 2)
 		{
 			run_time_sec = atoi(argv[2]);
@@ -79,18 +80,23 @@ int main(int argc, char *argv[]) //usage: ./pwm [mirror RPM] [seconds to run] [a
 	**/
 	
     char ch;
+	char state = 'D';
 	uint8_t atspeed;
 	uint8_t sos;
 	uint32_t start_tick = gpioTick();
 	uint64_t stop_tick = start_tick + run_time_sec*1000000 + run_time_usec;
-	while (gpioTick() < stop_tick)
-	{
+	//printf("stop_tick= %llu\n\r", stop_tick);
+	//printf("start_tick = %lu\n\r", start_tick);
+	//printf("tick = %lu\n\r", gpioTick());
+	while (gpioTick() < stop_tick) {
+
 		ch = getch();
 		if (toupper(ch) == 'Q') { //early termination if 'q' is pressed
 			printf("QUITTING\n\r");
 			break;
 		}
 		else if (toupper(ch) == 'E') {
+			state = 'E';
 			printf("ENABLING\n\r");
             if(mirrorEnable(mirror)) printf("Error enabling\n");
             if(mirrorSetRPM(mirror, target_rpm)) printf("Error setting rpm\n");			
@@ -101,6 +107,7 @@ int main(int argc, char *argv[]) //usage: ./pwm [mirror RPM] [seconds to run] [a
             **/
         }
 		else if (toupper(ch) == 'D') {
+			state = 'D';
 			printf("DISABLING\n\r");
             if(mirrorSetRPM(mirror, 0)) printf("Error setting rpm\n");
 			if(mirrorDisable(mirror)) printf("Error disbaling\n");
@@ -108,15 +115,20 @@ int main(int argc, char *argv[]) //usage: ./pwm [mirror RPM] [seconds to run] [a
             gpioHardwarePWM(PWM_PIN, 0,0); //turn off pwm
 			gpioWrite(EN_PIN,1); //disable
             **/
-		}
+		}// end ifs on getch
 		
-        atspeed = mirrorCheckAtSpeed(mirror); //gpioRead(SPEED_PIN);
-		sos = gpioRead(SOS_PIN);
-		
-		printf("ATSPEED LEVEL: %d\tSOS LEVEL: %d\n\r", atspeed,sos);
-		fprintf(f,"%f,%d,%d\n",(gpioTick()-start_tick)/1000.0,atspeed,sos);
-	}
-
+		switch (state) {
+			case 'E':
+				atspeed = mirrorCheckAtSpeed(mirror); //gpioRead(SPEED_PIN);
+				sos = gpioRead(SOS_PIN);
+				
+				printf("ATSPEED LEVEL: %d\tSOS LEVEL: %d\n\r", atspeed,sos);
+				fprintf(f,"%f,%d,%d\n",(gpioTick()-start_tick)/1000.0,atspeed,sos);
+				break;
+			default:
+				break;
+		}// end switch(state)
+	}// end while
 
     mirrorSetRPM(mirror,0);
     mirrorDisable(mirror);
