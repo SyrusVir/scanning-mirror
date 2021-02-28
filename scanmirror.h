@@ -5,8 +5,8 @@
 
 typedef struct Mirror {
     uint8_t FREQ_PIN;
-    int ENABLE_PIN;
-    int ATSPEED_PIN;
+    uint8_t ENABLE_PIN;
+    uint8_t ATSPEED_PIN;
 } mirror_t;
 
 int mirrorConfig(mirror_t m);
