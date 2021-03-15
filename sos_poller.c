@@ -41,6 +41,7 @@ void* sosPoller(void* sos_poller_arg)
     uint8_t trigger_level = poller->trigger_level; 
     uint32_t delay_usec = poller->delay_usec;
     pthread_mutex_t* lock = poller->laser_mutex; 
+    printf("poller ID=%lX\tpoller lock=%p\n\r",pthread_self(),lock);
     
     //main polling loop
     while(!poller->exit_flag)

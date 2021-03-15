@@ -10,20 +10,21 @@
 #define THREAD_OUT 24       //physical pin 18; This pin will be pulled LO when THREAD_IN is polled as LO
 #define THREAD_CONTROL 25   //physical pin 22 output pin wired to THREAD_IN
 
-#define DELAY_USEC 300 //microseconds after THREAD_IN or ALERT_IN is triggered to reset *_OUT pin to HI
+#define DELAY_USEC 10000 //microseconds after THREAD_IN or ALERT_IN is triggered to reset *_OUT pin to HI
 
 //Function to simulate mutex operation in main. Pulse GPIO if mutex obtained
 void* threadOutFunc(void* arg_lock)
 {
     pthread_mutex_t* lock = (pthread_mutex_t*)arg_lock;
-
+    printf("threadOUt ID=%lX\tthreadOutlock=%p\n\r",pthread_self(),lock);
     while(1)
     {
         if (pthread_mutex_trylock(lock) != 0)
         {
             pthread_mutex_unlock(lock);
-            gpioTrigger(THREAD_OUT,5,1);
+            gpioWrite(THREAD_OUT,1);
         }
+        else gpioWrite(THREAD_OUT,0);
     }
 }
 
