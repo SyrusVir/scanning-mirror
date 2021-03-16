@@ -11,14 +11,21 @@
 #define THREAD_OUT 24       //physical pin 18; This pin will be pulled LO when THREAD_IN is polled as LO
 #define THREAD_CONTROL 25   //physical pin 22 output pin wired to THREAD_IN
 
-#define DELAY_USEC 1000 //microseconds after THREAD_IN or ALERT_IN is triggered to reset *_OUT pin to HI
+#define DELAY_USEC 100 //microseconds after THREAD_IN or ALERT_IN is triggered to reset *_OUT pin to HI
 
-#define AUTO_TRIG_MSEC 200
+#define AUTO_TRIG_MSEC 500 //time between pulses the poller reads
+
 //Function to simulate mutex operation in main. Pulse GPIO if mutex obtained
-void* threadOutFunc(void* arg_lock)
+void* pollFeedback(void* arg_lock)
 {
+    //obtain the spinlock mutex from argument
     pthread_spinlock_t* lock = (pthread_spinlock_t*)arg_lock;
-    printf("threadOUt ID=%ld\tthreadOutlock=%p\n\r",pthread_self(),lock);
+
+    /* main loop constantly try to lock the spinlock [lock];
+     * If successful, immediately unlock and write a LO output only once.
+     * If the lock fails, the poller has been triggered. Write a HI output.
+     * The width of the resulting pulse should be close to DELAY_USEC
+     */
     while(1)
     {
         uint8_t x = 1;
@@ -34,6 +41,7 @@ void* threadOutFunc(void* arg_lock)
     }
 }
 
+//Callback function that emits a pulse on THREAD_CONTROL
 void timerCallback()
 {
     gpioTrigger(THREAD_CONTROL,2,0);
@@ -42,7 +50,7 @@ void timerCallback()
 int main() 
 {
     //Pigpiio intialization
-    gpioCfgClock(1,1,0);
+    gpioCfgClock(1,1,0);    //configure for 1ms sample rate with PCM clock
     gpioInitialise();
 
     //config pins
@@ -57,45 +65,39 @@ int main()
     //initialize poller
     pthread_spinlock_t lock;
     pthread_spin_init(&lock, 0);
-    sos_poller_t* poller = sosPollerInit(&lock, THREAD_IN, 0, DELAY_USEC);
+    pin_poller_t* poller = pinPollerInit(&lock, THREAD_IN, 0, DELAY_USEC);
     
     //configuring threads
     pthread_t poller_thread_id;
-    pthread_t pulse_thread_id;
+    pthread_t pollfb_thread_id;
     pthread_attr_t attr;
-    clockid_t cid;
-
     pthread_attr_init(&attr);
 
-    //set thread affinities
+    //set thread cpu affinities////////////////////
     cpu_set_t cpu_mask;
     
+    //assign poller to CPU 1
     CPU_ZERO(&cpu_mask);
     CPU_SET(1, &cpu_mask);
     pthread_attr_setaffinity_np(&attr, sizeof(cpu_mask), &cpu_mask);
-    pthread_create(&poller_thread_id, &attr, &sosPoller, poller);
-    pthread_getcpuclockid(poller_thread_id, &cid);
-    printf("poller CID = %lX:\n\r", cid);
+    pthread_create(&poller_thread_id, &attr, &pinPoller, poller);
 
+    //assign poller feedback to CPU 2
     CPU_ZERO(&cpu_mask);
     CPU_SET(2, &cpu_mask);
     pthread_attr_setaffinity_np(&attr,sizeof(cpu_mask), &cpu_mask);
-    pthread_create(&pulse_thread_id, &attr, &threadOutFunc, (void*)&lock);
-    pthread_getcpuclockid(pulse_thread_id, &cid);
-    printf("pulse CID = %lX:\n\r", cid);
+    pthread_create(&pollfb_thread_id, &attr, &pollFeedback, (void*)&lock);
 
+    //assign main thread to cpu 0
     CPU_ZERO(&cpu_mask);
     CPU_SET(0, &cpu_mask);
     pthread_setaffinity_np(pthread_self(),sizeof(cpu_mask), &cpu_mask);
-    printf("main CID = %lX:\n\r", cid);
-    printf("main TID = %ld\n\r", pthread_self());
-
-    //ncurses init
-    /* initscr();
-    nodelay(stdscr,TRUE);
-    noecho(); */
+    
+    //configure timed function callback
     gpioSetTimerFunc(1, AUTO_TRIG_MSEC, timerCallback);
-    char c;// = getch();
+    
+    //wait for user exit command 'q'
+    char c;
     do
     {
         scanf("%c",&c);// = getch();
@@ -109,8 +111,8 @@ int main()
     printf("exiting\n\r");
     poller->exit_flag = 1;
     pthread_join(poller_thread_id, NULL);
-    pthread_cancel(pulse_thread_id);
-    sosPollerDestroy(poller);
+    pthread_cancel(pollfb_thread_id);
+    pinPollerDestroy(poller);
     pthread_spin_destroy(&lock);
     gpioTerminate();
     nodelay(stdscr, FALSE);

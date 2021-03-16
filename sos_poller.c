@@ -1,69 +1,110 @@
+/**File: sos_poller.c
+ * Author: Jude Alnas
+ * date: March 16, 2021
+ * 
+ * Description: The purpose of these functions is to implement a thread-safe poller that uses busy waiting
+ *              to detect as quicly as possible when an input IO pin reads a specified level. This is done
+ *              by executing the polling loop in a thread that (ideally) executes on a dedicated CPU core.
+ *              When the specified event is detected, a spin lock is locked and is unlocked after a specified 
+ *              number of microseconds has elapsed. Spin locks are used instead of mutexes for decreased overhead.
+ *              
+ *              Usage steps:
+ *              1)  call pinPollerInit() - this configures the pin poller
+ *              2)  call pthread_create() with pinPoller() as the function parameter - this starts the main polling loop
+ *                                                                                     in the specified thread
+ *              3)  Raise exit_flag - using the pointer returned by pinPollerInit(), raise the exit_flag to terminate the
+ *                                    polling loop
+ *              4)  call pinPollerDestroy() - this simply frees the memory space allocated to hold the pin poller structure
+ * 
+ *              GPIO IO interfacing is done using the pigpio library
+ * 
+ **/
+
+#include <pigpio.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <stdint.h>
 
-typedef struct SOSPoller
+typedef struct
 {
-    pthread_spinlock_t* laser_mutex;    //mutex to lock to indicate [trigger_level] was detected at pin [sos_detector_pin]
+    pthread_spinlock_t* spin_lock;    //mutex to lock to indicate [trigger_level] was detected at pin [sos_detector_pin]
     uint8_t exit_flag;  //raise flag to exit poller and poller thread
     uint8_t trigger_level;  //1 or 0; GPIO level poller looks for
-    uint8_t sos_detector_pin;   //RPi pin to poll for [trigger_level]
-    uint32_t delay_usec;    // after delay_usec, laser_mutex is unlocked 
-} sos_poller_t;
+    uint8_t poller_pin;   //RPi pin to poll for [trigger_level]
+    uint32_t delay_usec;    // after delay_usec, spin_lock is unlocked 
+} pin_poller_t;
 
-sos_poller_t* sosPollerInit(pthread_spinlock_t* lock, int sos_detector_pin, int trigger_level, uint32_t delay_usec)
+//Obtain pointer to configured pin poller. spin_lock must be a pointer to a configured pthread spinlock. If 
+pin_poller_t* pinPollerInit(pthread_spinlock_t* spin_lock, uint8_t poller_pin, uint8_t trigger_level, uint32_t delay_usec)
 {
-    sos_poller_t* poller = malloc(sizeof(sos_poller_t));
-    poller->sos_detector_pin = sos_detector_pin;
+    /**Function: pinPollerInit
+     * Parameters:  pthread_spinock_t* spin_lock - pointer to a configured pthread spinlock. Be sure to free 
+     *                                              this once pinPoller terminates
+     *              uint8_t poller_pin - the GPIO pin of the RPI to poll.
+     *              uint8_t trigger_level - If poller_pin is sampled at this logic level, the poller locks spin_lock
+     *              uint32_t delay_usec - how long to keep spin_lock locked before releasing
+     * 
+     * Return: pin_poller_t* poller - pointer to allocated space containing the poller structure
+     * 
+     * Description: Instantiates a poller structure in allocated memory with the user parameters, returning a pointer.
+     *              The spin_lock must be pre-configured as it is expected that this lock will be shared with other
+     *              threads/processes. It is user's responsiblity to deallocate this spin_lock
+     */
+    pin_poller_t* poller = malloc(sizeof(pin_poller_t));
+    poller->poller_pin = poller_pin;
     poller->exit_flag = 0;
     poller->delay_usec = delay_usec;
-    poller->trigger_level = (trigger_level ? 1 : 0); //return 1 if [trigger_level] non_zero, 0 otherwise
-    poller->laser_mutex = lock;
+    poller->trigger_level = (trigger_level ? 1 : 0); //return 1 if trigger_level non_zero, 0 otherwise
+    poller->spin_lock = spin_lock;
     return poller;
-} //end sosPollerInit()
+} //end pinPollerInit()
 
-int sosPollerDestroy(sos_poller_t* poller)
+void pinPollerExit(pin_poller_t* poller)
 {
-    if (pthread_spin_destroy(poller->laser_mutex) == EBUSY) return EBUSY; //return with error if attempting to destroy a mutex locked elsewhere
+    poller->exit_flag = 1;
+} //end pinPollerExit
+
+//Free poller memory. The spin lock is NOT freed here and must be free'd elsewhere.
+int pinPollerDestroy(pin_poller_t* poller)
+{   
     free(poller);
-
     return 0;
-} //end sosPollerDestroy
+} //end pinPollerDestroy
 
-void* sosPoller(void* sos_poller_arg)
+//Main polling loop. Expects sos_poller_arg to be of type (pin_poller_t*). Pass as argument to pthread_create().
+void* pinPoller(void* sos_poller_arg)
 {
-    sos_poller_t* poller = (sos_poller_t*) sos_poller_arg;
+    /**Function: pinPoller
+     * Parameters: void* sos_poller_arg - Pass a pointer to a configured pin poller, i.e. (pin_poller_t*)
+     * Return:  None
+     * 
+     * Description: Intended to be function argument to pthread_create(). First, local copies of the poller
+     *              parameters are saved for quicker access. Then the main loop is entered.
+     * 
+     *              If the logic level trigger_level is observed on pin, the spin lock pointed to by lock
+     *              is locked. After delay_usec microseconds, the lock is released. Repeat the process until
+     *              exit_flag is raised.
+     */
+    pin_poller_t* poller = (pin_poller_t*) sos_poller_arg;
 
     //local copies of variables for quicker access within main loop
-    uint8_t pin = poller->sos_detector_pin;
-    uint8_t trigger_level = poller->trigger_level; 
-    uint32_t delay_usec = poller->delay_usec;
-    pthread_spinlock_t* lock = poller->laser_mutex; 
-    printf("poller parameters:\n\r");
-    printf("pin=%hu\ttrigger_level=%hu\tdelay=%lu\n\r", pin, trigger_level, delay_usec);
-    printf("poller ID=%ld\tpoller lock=%p\n\r",pthread_self(),lock);
+    uint8_t local_pin = poller->poller_pin;
+    uint8_t local_trigger_level = poller->trigger_level; 
+    uint32_t local_delay_usec = poller->delay_usec;
+    pthread_spinlock_t* local_lock = poller->spin_lock; 
     
     //main polling loop
     while(!poller->exit_flag)
     {
-        //poll until [trigger_level] or exit_flag. 
+        //poll until trigger_level or exit_flag. 
         //gpioRead first to take advantage of short-circuit conditional evaluation
-        //printf("before poll\n\r");
-        while (gpioRead(pin) != trigger_level && !poller->exit_flag); 
-        /* while (!poller->exit_flag)
-        {
-            int  read = gpioRead(pin);
-            printf("gpioRead=%d\r", read);
-            if(read == trigger_level) break;
-        }  */
-        //uint32_t poller_tick = gpioTick();
-        if (poller->exit_flag) break;   //exit loop if exit_flag set
-        pthread_spin_lock(lock); //else lock mutex, stopping emission
-        gpioDelay(delay_usec);          //delay for specified microseconds
-        pthread_spin_unlock(lock);     //unlock mutex, allowing emission
-        //printf("poller_tick=%lu\n\r",poller_tick);
-               
+        while (gpioRead(local_pin) != local_trigger_level && !poller->exit_flag); 
+        
+        if (poller->exit_flag) break;       //exit loop if exit_flag set
+        pthread_spin_lock(local_lock);      //else lock mutex, stopping emission
+        gpioDelay(local_delay_usec);        //delay for specified microseconds
+        pthread_spin_unlock(local_lock);    //unlock mutex, allowing emission     
     } //end while(!poller->exit_flag)
 
     return NULL;
