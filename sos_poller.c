@@ -5,15 +5,14 @@
 
 typedef struct SOSPoller
 {
-    pthread_mutex_t* laser_mutex;    //mutex to lock to indicate [trigger_level] was detected at pin [sos_detector_pin]
-    pthread_spinlock_t* spin;    //mutex to lock to indicate [trigger_level] was detected at pin [sos_detector_pin]
+    pthread_spinlock_t* laser_mutex;    //mutex to lock to indicate [trigger_level] was detected at pin [sos_detector_pin]
     uint8_t exit_flag;  //raise flag to exit poller and poller thread
     uint8_t trigger_level;  //1 or 0; GPIO level poller looks for
     uint8_t sos_detector_pin;   //RPi pin to poll for [trigger_level]
     uint32_t delay_usec;    // after delay_usec, laser_mutex is unlocked 
 } sos_poller_t;
 
-sos_poller_t* sosPollerInit(pthread_mutex_t* lock, int sos_detector_pin, int trigger_level, uint32_t delay_usec)
+sos_poller_t* sosPollerInit(pthread_spinlock_t* lock, int sos_detector_pin, int trigger_level, uint32_t delay_usec)
 {
     sos_poller_t* poller = malloc(sizeof(sos_poller_t));
     poller->sos_detector_pin = sos_detector_pin;
@@ -26,7 +25,7 @@ sos_poller_t* sosPollerInit(pthread_mutex_t* lock, int sos_detector_pin, int tri
 
 int sosPollerDestroy(sos_poller_t* poller)
 {
-    if (pthread_mutex_destroy(poller->laser_mutex) == EBUSY) return EBUSY; //return with error if attempting to destroy a mutex locked elsewhere
+    if (pthread_spin_destroy(poller->laser_mutex) == EBUSY) return EBUSY; //return with error if attempting to destroy a mutex locked elsewhere
     free(poller);
 
     return 0;
@@ -40,23 +39,31 @@ void* sosPoller(void* sos_poller_arg)
     uint8_t pin = poller->sos_detector_pin;
     uint8_t trigger_level = poller->trigger_level; 
     uint32_t delay_usec = poller->delay_usec;
-    pthread_mutex_t* lock = poller->laser_mutex; 
-    printf("poller ID=%lX\tpoller lock=%p\n\r",pthread_self(),lock);
+    pthread_spinlock_t* lock = poller->laser_mutex; 
+    printf("poller parameters:\n\r");
+    printf("pin=%hu\ttrigger_level=%hu\tdelay=%lu\n\r", pin, trigger_level, delay_usec);
+    printf("poller ID=%ld\tpoller lock=%p\n\r",pthread_self(),lock);
     
     //main polling loop
     while(!poller->exit_flag)
     {
         //poll until [trigger_level] or exit_flag. 
         //gpioRead first to take advantage of short-circuit conditional evaluation
-        printf("before poll\n\r");
+        //printf("before poll\n\r");
         while (gpioRead(pin) != trigger_level && !poller->exit_flag); 
-        printf("after poll\n\r");
-        uint32_t poller_tick = gpioTick();
+        /* while (!poller->exit_flag)
+        {
+            int  read = gpioRead(pin);
+            printf("gpioRead=%d\r", read);
+            if(read == trigger_level) break;
+        }  */
+        //uint32_t poller_tick = gpioTick();
         if (poller->exit_flag) break;   //exit loop if exit_flag set
-        pthread_mutex_lock(lock);       //else lock mutex, stopping emission
+        pthread_spin_lock(lock); //else lock mutex, stopping emission
         gpioDelay(delay_usec);          //delay for specified microseconds
-        pthread_mutex_unlock(lock);     //unlock mutex, allowing emission
-        printf("poller_tick=%ld\n\r",poller_tick);
+        pthread_spin_unlock(lock);     //unlock mutex, allowing emission
+        //printf("poller_tick=%lu\n\r",poller_tick);
+               
     } //end while(!poller->exit_flag)
 
     return NULL;
