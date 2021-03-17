@@ -94,9 +94,8 @@ int pinPollerCheckIn(pin_poller_t* poller)
      *              determined by the return value of pthread_spin_trylock. EBUSY means an event occurred. EINVAL 
      *              means an error.  0 is returned if no event. 
      */
-    int status = pthread_spin_trylock(&poller->spin_lock);
-    if (status == 0) pthread_spin_unlock(&poller->spin_lock);
-
+    int status = pthread_spin_trylock(poller->spin_lock);
+    if (status == 0) pthread_spin_unlock(poller->spin_lock);
     return status;
 }
 
@@ -134,11 +133,18 @@ void* pinPollerMain(void* sos_poller_arg)
         //Lock the spin lock to signal an event. If lock invalid, exit with EINVAL error
         if(pthread_spin_lock(local_lock) == EINVAL)
         {
+            printf("lock error\n\r");
             poller->return_status = EINVAL;
             return NULL;
         } 
-
-        gpioDelay(local_delay_usec);            //delay for specified microseconds
+        
+        //to reduce jitter caused by extended events, delay until the target pin is no longer 
+        //at the specifed level
+        do
+        {
+            gpioDelay(local_delay_usec);            //delay for specified microseconds
+        } while (gpioRead(local_pin) == local_trigger_level);
+        
         pthread_spin_unlock(local_lock);        //unlock mutex, allowing emission     
     } //end while(!poller->exit_flag)
 
