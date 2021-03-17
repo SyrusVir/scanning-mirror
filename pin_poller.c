@@ -10,7 +10,7 @@
  *              
  *              Usage steps:
  *              1)  call pinPollerInit() - this configures the pin poller
- *              2)  call pthread_create() with pinPoller() as the function parameter - this starts the main polling loop
+ *              2)  call pthread_create() with pinPollerMain() as the function parameter - this starts the main polling loop
  *                                                                                     in the specified thread
  *              3)  Raise exit_flag - using the pointer returned by pinPollerInit(), raise the exit_flag to terminate the
  *                                    polling loop
@@ -32,15 +32,16 @@ typedef struct
     uint8_t exit_flag;  //raise flag to exit poller and poller thread
     uint8_t trigger_level;  //1 or 0; GPIO level poller looks for
     uint8_t poller_pin;   //RPi pin to poll for [trigger_level]
+    int return_status;      //final status of poller upon exit
     uint32_t delay_usec;    // after delay_usec, spin_lock is unlocked 
 } pin_poller_t;
 
-//Obtain pointer to configured pin poller. spin_lock must be a pointer to a configured pthread spinlock. If 
+//Obtain pointer to configured pin poller. spin_lock must be a pointer to a configured pthread spinlock. If NULL returned, critical failure has occured
 pin_poller_t* pinPollerInit(pthread_spinlock_t* spin_lock, uint8_t poller_pin, uint8_t trigger_level, uint32_t delay_usec)
 {
     /**Function: pinPollerInit
      * Parameters:  pthread_spinock_t* spin_lock - pointer to a configured pthread spinlock. Be sure to free 
-     *                                              this once pinPoller terminates
+     *                                              this once pinPollerMain terminates
      *              uint8_t poller_pin - the GPIO pin of the RPI to poll.
      *              uint8_t trigger_level - If poller_pin is sampled at this logic level, the poller locks spin_lock
      *              uint32_t delay_usec - how long to keep spin_lock locked before releasing
@@ -49,14 +50,21 @@ pin_poller_t* pinPollerInit(pthread_spinlock_t* spin_lock, uint8_t poller_pin, u
      * 
      * Description: Instantiates a poller structure in allocated memory with the user parameters, returning a pointer.
      *              The spin_lock must be pre-configured as it is expected that this lock will be shared with other
-     *              threads/processes. It is user's responsiblity to deallocate this spin_lock
+     *              threads/processes. It is user's responsiblity to deallocate this spin_lock. The previous 
+     *              configuration of poller_pin is cleared and it is set as an input.
      */
+
+    if (gpioInitialise() < 0) return NULL;
     pin_poller_t* poller = malloc(sizeof(pin_poller_t));
     poller->poller_pin = poller_pin;
     poller->exit_flag = 0;
     poller->delay_usec = delay_usec;
     poller->trigger_level = (trigger_level ? 1 : 0); //return 1 if trigger_level non_zero, 0 otherwise
     poller->spin_lock = spin_lock;
+    poller->return_status = 0;
+
+    gpioSetMode(poller_pin, PI_INPUT);  //configured provided pin as input
+
     return poller;
 } //end pinPollerInit()
 
@@ -72,10 +80,30 @@ int pinPollerDestroy(pin_poller_t* poller)
     return 0;
 } //end pinPollerDestroy
 
-//Main polling loop. Expects sos_poller_arg to be of type (pin_poller_t*). Pass as argument to pthread_create().
-void* pinPoller(void* sos_poller_arg)
+//Returns 0 if no event has occurred. Returns EBUSY if an event has occurred and EINVAL if an error occurred
+int pinPollerCheckIn(pin_poller_t* poller)
 {
-    /**Function: pinPoller
+    /**Function: pinPollerCheckin
+     * Parameter: pin_poller_t* poller - a configured poller object with a valid spinlock reference
+     * Return: EINVAL or 0 - An invalid spinlock reference is a critical error. Other errors are handled
+     * 
+     * Description: Use to see if the poller has detected an event. A check for an event consists of trying
+     *              to lock the spin lock shared with the poller. If the lock is obtained (i.e. 0 is returned),
+     *              no event has occurred and the lock is immediately released to allow the poller to lock it as
+     *              soon as it requires it. If the lock is not obtained, either an event or an error has occurred, 
+     *              determined by the return value of pthread_spin_trylock. EBUSY means an event occurred. EINVAL 
+     *              means an error.  0 is returned if no event. 
+     */
+    int status = pthread_spin_trylock(&poller->spin_lock);
+    if (status == 0) pthread_spin_unlock(&poller->spin_lock);
+
+    return status;
+}
+
+//Main polling loop. Expects sos_poller_arg to be of type (pin_poller_t*). Pass as argument to pthread_create().
+void* pinPollerMain(void* sos_poller_arg)
+{
+    /**Function: pinPollerMain
      * Parameters: void* sos_poller_arg - Pass a pointer to a configured pin poller, i.e. (pin_poller_t*)
      * Return:  None
      * 
@@ -93,7 +121,7 @@ void* pinPoller(void* sos_poller_arg)
     uint8_t local_trigger_level = poller->trigger_level; 
     uint32_t local_delay_usec = poller->delay_usec;
     pthread_spinlock_t* local_lock = poller->spin_lock; 
-    
+
     //main polling loop
     while(!poller->exit_flag)
     {
@@ -101,10 +129,17 @@ void* pinPoller(void* sos_poller_arg)
         //gpioRead first to take advantage of short-circuit conditional evaluation
         while (gpioRead(local_pin) != local_trigger_level && !poller->exit_flag); 
         
-        if (poller->exit_flag) break;       //exit loop if exit_flag set
-        pthread_spin_lock(local_lock);      //else lock mutex, stopping emission
-        gpioDelay(local_delay_usec);        //delay for specified microseconds
-        pthread_spin_unlock(local_lock);    //unlock mutex, allowing emission     
+        if (poller->exit_flag) break;   //exit loop if exit_flag set
+        
+        //Lock the spin lock to signal an event. If lock invalid, exit with EINVAL error
+        if(pthread_spin_lock(local_lock) == EINVAL)
+        {
+            poller->return_status = EINVAL;
+            return NULL;
+        } 
+
+        gpioDelay(local_delay_usec);            //delay for specified microseconds
+        pthread_spin_unlock(local_lock);        //unlock mutex, allowing emission     
     } //end while(!poller->exit_flag)
 
     return NULL;

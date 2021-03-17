@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h> 
 #include <ncurses.h>
-#include "sos_poller.c"
+#include "pin_poller.c"
 #include <sched.h>
 #include <time.h>
 
@@ -80,7 +80,7 @@ int main()
     CPU_ZERO(&cpu_mask);
     CPU_SET(1, &cpu_mask);
     pthread_attr_setaffinity_np(&attr, sizeof(cpu_mask), &cpu_mask);
-    pthread_create(&poller_thread_id, &attr, &pinPoller, poller);
+    pthread_create(&poller_thread_id, &attr, &pinPollerMain, poller);
 
     //assign poller feedback to CPU 2
     CPU_ZERO(&cpu_mask);
