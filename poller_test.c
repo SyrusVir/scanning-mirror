@@ -8,12 +8,12 @@
 #include <time.h>
 
 #define THREAD_IN 23        //physical pin 16; pin that the threaded poller will poll
-#define THREAD_OUT 24       //physical pin 18; This pin will be pulled LO when THREAD_IN is polled as LO
+#define THREAD_OUT 24       //physical pin 18; This pin will be pulsed HI when THREAD_IN is polled as LO
 #define THREAD_CONTROL 25   //physical pin 22 output pin wired to THREAD_IN
 
-#define DELAY_USEC 100 //microseconds after THREAD_IN or ALERT_IN is triggered to reset *_OUT pin to HI
+#define DELAY_USEC 50 //microseconds after THREAD_IN or ALERT_IN is triggered to reset *_OUT pin to HI
 
-#define AUTO_TRIG_MSEC 500 //time between pulses the poller reads
+#define AUTO_TRIG_MSEC 0 //time between pulses the poller reads
 
 //Function to simulate mutex operation in main. Pulse GPIO if mutex obtained
 void* pollFeedback(void* arg_lock)
@@ -94,7 +94,10 @@ int main()
     pthread_setaffinity_np(pthread_self(),sizeof(cpu_mask), &cpu_mask);
     
     //configure timed function callback
-    gpioSetTimerFunc(1, AUTO_TRIG_MSEC, timerCallback);
+    if (AUTO_TRIG_MSEC != 0)
+    {
+        gpioSetTimerFunc(1, AUTO_TRIG_MSEC, timerCallback);
+    }
     
     //wait for user exit command 'q'
     char c;
