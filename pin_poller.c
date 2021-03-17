@@ -89,9 +89,10 @@ int pinPollerCheckIn(pin_poller_t* poller)
      * 
      * Description: Use to see if the poller has detected an event. A check for an event consists of trying
      *              to lock the spin lock shared with the poller. If the lock is obtained (i.e. 0 is returned),
-     *              no event has occurred and the lock is immediately released to allow the poller to lock it if
-     *              need be. If the lock is not obtained, either an event or an error has occurred, determined by
-     *              the return value of pthread_spin_trylock. EBUSY means an event occurred. EINVAL means an error.  0 is returned if no event 
+     *              no event has occurred and the lock is immediately released to allow the poller to lock it as
+     *              soon as it requires it. If the lock is not obtained, either an event or an error has occurred, 
+     *              determined by the return value of pthread_spin_trylock. EBUSY means an event occurred. EINVAL 
+     *              means an error.  0 is returned if no event. 
      */
     int status = pthread_spin_trylock(&poller->spin_lock);
     if (status == 0) pthread_spin_unlock(&poller->spin_lock);
