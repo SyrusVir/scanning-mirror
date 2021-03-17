@@ -1,11 +1,16 @@
 #include <scanmirror.h>
 #include <stdio.h>
 
-unsigned int const MIRROR_FULL_DUTY = 1000000;
-
 int mirrorConfig(mirror_t m) {
     char err_msg[] = "configMirror: PIGPIO EXCEPTION %d WITH %s\n";
     int status;
+
+    status = gpioInitialise();
+    if (status < 0) {
+        printf(err_msg, status, "gpioInitialise()");
+        return status;
+    }
+
     status = gpioSetMode(m.ENABLE_PIN, PI_OUTPUT);
     if (status < 0) {
         printf(err_msg, status, "gpioSetMode(m.ENABLE_PIN)");
@@ -48,7 +53,7 @@ int mirrorSetRPM(mirror_t m, uint16_t rpm) {
         printf("RPM set to %u RPM\n",rpm);
         }
     unsigned int freq = rpm / 60.0 * 24; //equation provided in mirror docs
-    return gpioHardwarePWM(m.FREQ_PIN,freq,(unsigned)MIRROR_FULL_DUTY/2);
+    return gpioHardwarePWM(m.FREQ_PIN,freq,(unsigned)PI_HW_PWM_RANGE/2);
 }
 
 int mirrorCheckAtSpeed(mirror_t m) {
@@ -56,7 +61,7 @@ int mirrorCheckAtSpeed(mirror_t m) {
     int status;
     status = gpioRead(m.ATSPEED_PIN);
     if (status >= 0) {
-        return (1 - gpioRead(m.ATSPEED_PIN)); //atspeed pin is LOW when at speed
+        return (!gpioRead(m.ATSPEED_PIN)); //atspeed pin is LOW when at speed
     }
     else return status;
 }
