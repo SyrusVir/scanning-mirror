@@ -1,11 +1,11 @@
 #define _GNU_SOURCE
+#include <pigpio.h> 
 #include <pthread.h>
 #include <ncurses.h>
 #include <errno.h>
 #include "scanmirror.h"
 #include <stdio.h>
 #include <sched.h>
-#include <pigpio.h> 
 #include "pin_poller.c"
 
 //Mirror and SOS pins
@@ -13,7 +13,7 @@
 #define MIRROR_SPEED_PIN 23         // physical pin 16; mirror ATSPEED input
 #define MIRROR_SOS_PIN 24           // physical pin 18; sos detector input
 #define MIRROR_ENABLE_PIN 25        // physical pin 22; mirror ENABLE output
-#define MIRROR_SOS_DELAY_USEC 100    // usecs to delay once SOS signal detected by poller
+#define MIRROR_SOS_DELAY_USEC 50    // usecs to delay once SOS signal detected by poller
 
 //laser pins
 #define LASER_ENABLE_PIN 5      // physical pin 29
@@ -31,6 +31,7 @@ typedef enum state
     STOP
 } test_state_t;
 
+
 //prep laser for emission
 void enableLaser()
 {
@@ -40,7 +41,7 @@ void enableLaser()
     gpioWrite(LASER_ENABLE_PIN,0);
 
     gpioSetMode(LASER_PULSE_PIN, PI_OUTPUT);
-    gpioHardwarePWM(LASER_PULSE_PIN, LASER_PULSE_FREQ, LASER_PULSE_DUTY);
+    gpioHardwarePWM(LASER_PULSE_PIN, LASER_PULSE_FREQ, PI_HW_PWM_RANGE - LASER_PULSE_DUTY);
     return;
 }
 
@@ -56,8 +57,11 @@ int main()
 {
     // Pigpio Initialize
     gpioCfgClock(1,1,0);    // 1 us sample rate; using PCM clock for hardware PWM
-    gpioInitialise();
-    
+    if (gpioInitialise() < 0) 
+    {
+        perror("gpioInitialise()");
+        return -1;
+    }
     //ncurses initialization
     initscr();
     nodelay(stdscr, true);
@@ -68,7 +72,7 @@ int main()
     gpioWrite(LASER_SHUTTER_PIN,0); // start with laser shuttered
     
     gpioSetMode(LASER_ENABLE_PIN,PI_OUTPUT);
-    gpioWrite(LASER_ENABLE_PIN, 0); // start with laser disabled
+    gpioWrite(LASER_ENABLE_PIN, 0); // start with laser disabled    
     ////////////////////////////////////////////////////////////
 
     // mirror initialization /////////////////////////////////////////////////////
@@ -83,7 +87,6 @@ int main()
         return -1;
     }
     //////////////////////////////////////////////////////////////////////////////
-
     // Initializing SOS pin poller//////////////////////////////////////////////////////////////////
     pthread_spinlock_t sos_spinlock;
     pthread_spin_init(&sos_spinlock, 0);
@@ -100,16 +103,22 @@ int main()
     pthread_setaffinity_np(sos_poller_tid, sizeof(cpu_mask), &cpu_mask);
     pthread_create(&sos_poller_tid, &attr, &pinPollerMain, sos_poller);
     ////////////////////////////////////////////////////////////////////////////////////////////////
-
-    test_state_t state = WAIT;
     
+    //assign main thread to isolated core 1////////////////////////////////////////////
+    CPU_ZERO(&cpu_mask);
+    CPU_SET(1,&cpu_mask);
+    pthread_setaffinity_np(pthread_self(), sizeof(cpu_mask), &cpu_mask);
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    
+    /**** main test code ****/
+    test_state_t state = WAIT;
     int c;
     while (state != STOP)
     {
         switch (state)
         {
             case WAIT:
-                printf("\'q\' to quit.\n\r\'S\' to start.\n\r");
+                printw("\'q\' to quit.\n\r\'S\' to start.\n\r");
                 do
                 {
                     c = getch();
@@ -133,24 +142,25 @@ int main()
                 printf("Waiting for poller event...\n\r");
                 while (pinPollerCheckIn(sos_poller) == 0); //wait until first SOS detection
                 printf("Waiting for first lock...\n\r");
-                while (pinPollerCheckIn(sos_poller) != EBUSY); //wait until lock was found available
+                while (pinPollerCheckIn(sos_poller) != 1); //wait until lock was found available
                 printf("STARTING...\n\r");
                 gpioWrite(LASER_ENABLE_PIN, 1); //start laser emission
                 
                 c = getch();
                 while (c != 'q')
                 {
+                    uint8_t x = 1;
                     //wait until poller releases lock
-                    while (pinPollerCheckIn(sos_poller) !=  EBUSY)
+                    while (pthread_spin_trylock(&sos_spinlock) == 0/* pinPollerCheckIn(sos_poller) !=  1 */)
                     {  
+                        pthread_spin_unlock(&sos_spinlock);
                         //While the poller lock is free, keep laser enabled
-                        gpioWrite(LASER_ENABLE_PIN, 1);
-                        c = getch();
-                        if (c == 'q') break;
+                        if (x--)
+                        {
+                            gpioWrite(LASER_ENABLE_PIN, 1);
+                        }
                     }
-
-                    //exit if 'q' input
-                    if (c == 'q') break;
+                    c = getch();
 
                     //else disable laser
                     gpioWrite(LASER_ENABLE_PIN,0);
@@ -164,16 +174,21 @@ int main()
     } //end while (state != STOP)
     //disable Laser
     disableLaser();
+    printf("laser disabled\n\r");
 
     //stop poller
     pinPollerExit(sos_poller);
     pthread_join(sos_poller_tid, NULL);
+    printf("joined thread\n\r");
+    pinPollerDestroy(sos_poller);
+    pthread_spin_destroy(&sos_spinlock);
+    printf("poller destroyed\n\r");
+    
     //stop mirror
     mirrorSetRPM(mirror, 0);
     mirrorDisable(mirror);
+    printf("mirror stopped\n\r");
 
-    pinPollerDestroy(sos_poller);
-    pthread_spin_destroy(&sos_spinlock);
 
     gpioTerminate();
     nodelay(stdscr, false);

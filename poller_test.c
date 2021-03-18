@@ -11,16 +11,16 @@
 #define THREAD_OUT 24       //physical pin 18; This pin will be pulsed HI when THREAD_IN is polled as LO
 #define THREAD_CONTROL 25   //physical pin 22 output pin wired to THREAD_IN
 
-#define DELAY_USEC 50 //microseconds after THREAD_IN or ALERT_IN is triggered to reset *_OUT pin to HI
+#define DELAY_USEC 75 //microseconds after THREAD_IN or ALERT_IN is triggered to reset *_OUT pin to HI
 
-#define AUTO_TRIG_MSEC 0 //time between pulses the poller reads
+#define AUTO_TRIG_MSEC 10 //time between pulses the poller reads
 
 //Function to simulate mutex operation in main. Pulse GPIO if mutex obtained
-void* pollFeedback(void* arg_lock)
+void* pollFeedback(void* arg_poller)
 {
     //obtain the spinlock mutex from argument
-    pthread_spinlock_t* lock = (pthread_spinlock_t*)arg_lock;
-
+    pin_poller_t* poller = (pin_poller_t*)arg_poller;
+    pthread_spinlock_t* lock = poller->spin_lock;
     /* main loop constantly try to lock the spinlock [lock];
      * If successful, immediately unlock and write a LO output only once.
      * If the lock fails, the poller has been triggered. Write a HI output.
@@ -29,9 +29,8 @@ void* pollFeedback(void* arg_lock)
     while(1)
     {
         uint8_t x = 1;
-        while (pthread_spin_trylock(lock) == 0)
-        {
-            pthread_spin_unlock(lock);    
+        while (pinPollerCheckIn(poller) != 1)
+        { 
             if (x--) 
             {
                 gpioWrite(THREAD_OUT, 0);
@@ -86,7 +85,7 @@ int main()
     CPU_ZERO(&cpu_mask);
     CPU_SET(2, &cpu_mask);
     pthread_attr_setaffinity_np(&attr,sizeof(cpu_mask), &cpu_mask);
-    pthread_create(&pollfb_thread_id, &attr, &pollFeedback, (void*)&lock);
+    pthread_create(&pollfb_thread_id, &attr, &pollFeedback, poller);
 
     //assign main thread to cpu 0
     CPU_ZERO(&cpu_mask);
@@ -101,6 +100,7 @@ int main()
     
     //wait for user exit command 'q'
     char c;
+    printf("Type \'q\' to quit\n\r");
     do
     {
         scanf("%c",&c);// = getch();
