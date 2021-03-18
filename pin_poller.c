@@ -68,7 +68,7 @@ pin_poller_t* pinPollerInit(pthread_spinlock_t* spin_lock, uint8_t poller_pin, u
     return poller;
 } //end pinPollerInit()
 
-void pinPollerExit(pin_poller_t* poller)
+static inline void pinPollerExit(pin_poller_t* poller)
 {
     poller->exit_flag = 1;
 } //end pinPollerExit
@@ -80,8 +80,8 @@ int pinPollerDestroy(pin_poller_t* poller)
     return 0;
 } //end pinPollerDestroy
 
-//Returns 0 if no event has occurred. Returns EBUSY if an event has occurred and EINVAL if an error occurred
-int pinPollerCheckIn(pin_poller_t* poller)
+//Returns 0 if no event has occurred. Returns 1 if an event has occurred and -1 if EINVAL error occurred.
+static inline int pinPollerCheckIn(pin_poller_t* poller)
 {
     /**Function: pinPollerCheckin
      * Parameter: pin_poller_t* poller - a configured poller object with a valid spinlock reference
@@ -104,8 +104,7 @@ int pinPollerCheckIn(pin_poller_t* poller)
         pthread_spin_unlock(poller->spin_lock);
         return 0;
     }
-    else if (status == EINVAL) return -1;
-    else return 1;
+    else return (status == EINVAL ? -1 : 1);
 }
 
 //Main polling loop. Expects sos_poller_arg to be of type (pin_poller_t*). Pass as argument to pthread_create().
@@ -152,7 +151,7 @@ void* pinPollerMain(void* sos_poller_arg)
         do
         {
             gpioDelay(local_delay_usec);            //delay for specified microseconds
-        } while (gpioRead(local_pin) == local_trigger_level);
+        } while (gpioRead(local_pin) == local_trigger_level && !poller->exit_flag);
         
         pthread_spin_unlock(local_lock);        //unlock mutex, allowing emission     
     } //end while(!poller->exit_flag)
