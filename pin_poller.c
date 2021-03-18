@@ -85,18 +85,27 @@ int pinPollerCheckIn(pin_poller_t* poller)
 {
     /**Function: pinPollerCheckin
      * Parameter: pin_poller_t* poller - a configured poller object with a valid spinlock reference
-     * Return: EINVAL or 0 - An invalid spinlock reference is a critical error. Other errors are handled
+     * Return: 0, 1,-1 - 0 = Poller has not detected an event; 1 = poller has detected event; -1 = invalid spin lock
      * 
      * Description: Use to see if the poller has detected an event. A check for an event consists of trying
-     *              to lock the spin lock shared with the poller. If the lock is obtained (i.e. 0 is returned),
-     *              no event has occurred and the lock is immediately released to allow the poller to lock it as
-     *              soon as it requires it. If the lock is not obtained, either an event or an error has occurred, 
-     *              determined by the return value of pthread_spin_trylock. EBUSY means an event occurred. EINVAL 
-     *              means an error.  0 is returned if no event. 
+     *              to lock the spin lock shared with the poller.
+     * 
+     *              pthread_spin_trylock has 3 return values:
+     *              1) 0 = The spin lock has been acquired. This indicates the poller has NOT detected an event.
+     *                      In this situation, 0 is retrned by pinPollerCheckIn()
+     *              2) EBUSY = indicates that the spin lock is held by another thread, i.e. the polling thread.
+     *                         This indicates an event has occured. In this scenario, 1 is returned by pin PollerCheckIn()
+     *              3) EINVAL = the spin lock reference is invalid. A critical error. -1 is returned by pinPollerCheckIn().
+     *                          The actual error can be retrieved from errno.
      */
     int status = pthread_spin_trylock(poller->spin_lock);
-    if (status == 0) pthread_spin_unlock(poller->spin_lock);
-    return status;
+    if (status == 0) 
+    {
+        pthread_spin_unlock(poller->spin_lock);
+        return 0;
+    }
+    else if (status == EINVAL) return -1;
+    else return 1;
 }
 
 //Main polling loop. Expects sos_poller_arg to be of type (pin_poller_t*). Pass as argument to pthread_create().
@@ -138,7 +147,7 @@ void* pinPollerMain(void* sos_poller_arg)
             return NULL;
         } 
         
-        //to reduce jitter caused by extended events, delay until the target pin is no longer 
+        //to reduce jitter caused by extended events, repeat delay until the target pin is no longer 
         //at the specifed level
         do
         {
