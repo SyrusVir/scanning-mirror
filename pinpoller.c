@@ -20,7 +20,9 @@
  * 
  **/
 
-#include <pigpio.h>
+#include <pinpoller.h>
+/* #include <pigpio.h>
+#include <stdio.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -34,7 +36,7 @@ typedef struct
     uint8_t poller_pin;   //RPi pin to poll for [trigger_level]
     int return_status;      //final status of poller upon exit
     uint32_t delay_usec;    // after delay_usec, spin_lock is unlocked 
-} pin_poller_t;
+} pin_poller_t; */
 
 //Obtain pointer to configured pin poller. spin_lock must be a pointer to a configured pthread spinlock. If NULL returned, critical failure has occured
 pin_poller_t* pinPollerInit(pthread_spinlock_t* spin_lock, uint8_t poller_pin, uint8_t trigger_level, uint32_t delay_usec)
@@ -68,7 +70,7 @@ pin_poller_t* pinPollerInit(pthread_spinlock_t* spin_lock, uint8_t poller_pin, u
     return poller;
 } //end pinPollerInit()
 
-static inline void pinPollerExit(pin_poller_t* poller)
+void pinPollerExit(pin_poller_t* poller)
 {
     poller->exit_flag = 1;
 } //end pinPollerExit
@@ -81,7 +83,7 @@ int pinPollerDestroy(pin_poller_t* poller)
 } //end pinPollerDestroy
 
 //Returns 0 if no event has occurred. Returns 1 if an event has occurred and -1 if EINVAL error occurred.
-static inline int pinPollerCheckIn(pin_poller_t* poller)
+inline int pinPollerCheckIn(pin_poller_t* poller)
 {
     /**Function: pinPollerCheckin
      * Parameter: pin_poller_t* poller - a configured poller object with a valid spinlock reference

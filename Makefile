@@ -1,5 +1,5 @@
-poller_hw_test: scanmirror.c
-	gcc $@.c $< -o $@.out -I. -lpigpio -lncurses -pthread
+poller_hw_test: scanmirror.c pinpoller.c
+	gcc -O $@.c $^ -o $@.out -Winline -I. -lpigpio -lncurses -pthread
 
 libscanmirror: scanmirror.o
 	ar -r -c $@.a scanmirror.o 

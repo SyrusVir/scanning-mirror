@@ -6,7 +6,7 @@
 #include "scanmirror.h"
 #include <stdio.h>
 #include <sched.h>
-#include "pin_poller.c"
+#include "pinpoller.h"
 
 //Mirror and SOS pins
 #define MIRROR_PWM_PIN 18           // physical pin 12; mirror control PWM output
@@ -19,7 +19,7 @@
 #define LASER_ENABLE_PIN 5      // physical pin 29
 #define LASER_SHUTTER_PIN 6     // physical pin 31
 #define LASER_PULSE_PIN 13       // physical pin 33
-#define LASER_PULSE_FREQ 1000       
+#define LASER_PULSE_FREQ 500       
 #define LASER_PULSE_WIDTH_USEC 10
 #define LASER_PULSE_DUTY (unsigned int)(LASER_PULSE_WIDTH_USEC / 1000000.0 * LASER_PULSE_FREQ * PI_HW_PWM_RANGE)
 
@@ -151,19 +151,19 @@ int main()
                 {
                     uint8_t x = 1;
                     //wait until poller releases lock
-                    while (pthread_spin_trylock(&sos_spinlock) == 0/* pinPollerCheckIn(sos_poller) !=  1 */)
+                    while (/* pthread_spin_trylock(&sos_spinlock) == 0 */pinPollerCheckIn(sos_poller) !=  1)
                     {  
-                        pthread_spin_unlock(&sos_spinlock);
+                        // pthread_spin_unlock(&sos_spinlock);
                         //While the poller lock is free, keep laser enabled
                         if (x--)
                         {
                             gpioWrite(LASER_ENABLE_PIN, 1);
                         }
                     }
-                    c = getch();
-
                     //else disable laser
+                    
                     gpioWrite(LASER_ENABLE_PIN,0);
+                    c = getch();
                 }
                 printf("STOPPING\r");
                 state = STOP;

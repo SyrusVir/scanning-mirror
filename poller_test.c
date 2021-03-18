@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h> 
 #include <ncurses.h>
-#include "pin_poller.c"
+#include "pinpoller.h"
 #include <sched.h>
 #include <time.h>
 
