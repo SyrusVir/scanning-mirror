@@ -13,13 +13,15 @@
 #define MIRROR_SPEED_PIN 23         // physical pin 16; mirror ATSPEED input
 #define MIRROR_SOS_PIN 24           // physical pin 18; sos detector input
 #define MIRROR_ENABLE_PIN 25        // physical pin 22; mirror ENABLE output
-#define MIRROR_SOS_DELAY_USEC 50    // usecs to delay once SOS signal detected by poller
+#define MIRROR_SOS_DELAY_USEC 5000    // usecs to delay once SOS signal detected by poller
+#define MIRROR_RPM 1000
 
 //laser pins
 #define LASER_ENABLE_PIN 5      // physical pin 29
 #define LASER_SHUTTER_PIN 6     // physical pin 31
 #define LASER_PULSE_PIN 13       // physical pin 33
-#define LASER_PULSE_FREQ 500       
+#define LASER_PULSE_FREQ 1000    
+#define LASER_PULSE_PERIOD_USEC 1000000/LASER_PULSE_FREQ   
 #define LASER_PULSE_WIDTH_USEC 10
 #define LASER_PULSE_DUTY (unsigned int)(LASER_PULSE_WIDTH_USEC / 1000000.0 * LASER_PULSE_FREQ * PI_HW_PWM_RANGE)
 
@@ -41,7 +43,7 @@ void enableLaser()
     gpioWrite(LASER_ENABLE_PIN,0);
 
     gpioSetMode(LASER_PULSE_PIN, PI_OUTPUT);
-    gpioHardwarePWM(LASER_PULSE_PIN, LASER_PULSE_FREQ, PI_HW_PWM_RANGE - LASER_PULSE_DUTY);
+    gpioHardwarePWM(LASER_PULSE_PIN, LASER_PULSE_FREQ, LASER_PULSE_DUTY);
     return;
 }
 
@@ -87,10 +89,12 @@ int main()
         return -1;
     }
     //////////////////////////////////////////////////////////////////////////////
+
     // Initializing SOS pin poller//////////////////////////////////////////////////////////////////
     pthread_spinlock_t sos_spinlock;
     pthread_spin_init(&sos_spinlock, 0);
     pin_poller_t* sos_poller = pinPollerInit(&sos_spinlock, MIRROR_SOS_PIN, 0, MIRROR_SOS_DELAY_USEC); // configure pin poller
+    gpioDelay(10); //delay to diagnose SOS triggering at code beginning
     
     pthread_t sos_poller_tid;   //thread ID of the sos polling thread
     pthread_attr_t attr;
@@ -132,12 +136,15 @@ int main()
                 enableLaser();
 
                 //start with mirror startup
+                mirrorSetRPM(mirror, MIRROR_RPM); //start rotation
                 mirrorEnable(mirror);       //enable mirror
-                mirrorSetRPM(mirror, 1000); //start rotation
 
                 printf("Waiting for mirror at speed...\n\r");
-                while (!mirrorCheckAtSpeed(mirror));    //wait until at speed
-                
+                if (MIRROR_RPM != 0) 
+                {
+                    while (!mirrorCheckAtSpeed(mirror));    //wait until at speed
+                }
+
                 //Do not start laser until after first occurance of SOS detection
                 printf("Waiting for poller event...\n\r");
                 while (pinPollerCheckIn(sos_poller) == 0); //wait until first SOS detection
@@ -149,20 +156,23 @@ int main()
                 c = getch();
                 while (c != 'q')
                 {
-                    uint8_t x = 1;
+                    //uint8_t x = 1;
                     //wait until poller releases lock
                     while (/* pthread_spin_trylock(&sos_spinlock) == 0 */pinPollerCheckIn(sos_poller) !=  1)
                     {  
                         // pthread_spin_unlock(&sos_spinlock);
                         //While the poller lock is free, keep laser enabled
-                        if (x--)
-                        {
-                            gpioWrite(LASER_ENABLE_PIN, 1);
-                        }
+                        // if (x--)
+                        // {
+                        //     gpioWrite(LASER_ENABLE_PIN, 0);
+                        // }
+                    // gpioWrite(LASER_PULSE_PIN,1);
+                    // gpioDelay(500);    
+                    // gpioWrite(LASER_PULSE_PIN,0);
+                    // gpioDelay(500);    
                     }
                     //else disable laser
                     
-                    gpioWrite(LASER_ENABLE_PIN,0);
                     c = getch();
                 }
                 printf("STOPPING\r");
