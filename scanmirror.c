@@ -61,7 +61,7 @@ int mirrorCheckAtSpeed(mirror_t m) {
     int status;
     status = gpioRead(m.ATSPEED_PIN);
     if (status >= 0) {
-        return (!gpioRead(m.ATSPEED_PIN)); //atspeed pin is LOW when at speed
+        return (!status); //atspeed pin is LOW when at speed
     }
     else return status;
 }

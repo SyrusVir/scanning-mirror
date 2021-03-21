@@ -1,3 +1,15 @@
+/**Author: Jude Alnas
+ * Name: pwm.c
+ * Description: Test code for controlling the Precision Laser Scaning
+ * 				GECKO FOUR polygon scanning mirror.
+ * 				
+ * 				This code logs to a file the values of the SPEED_PIN and ENABLE_PIN
+ * 				
+ * 				The user can enable/disable the mirror by entering the (case-insensitive) character 'E'/'D'
+ * 
+ * 				Exit the code by entering (case-insensitive) 'Q''
+ */
+ 
 #include<stdio.h>
 #include<stdlib.h>
 #include<errno.h>
