@@ -25,7 +25,7 @@ pwm:
 
 .PHONY: clean
 clean: 
-	rm *.o *.a
+	rm -f *.o *.a
 
 cleanpwm:
 	rm pwm
