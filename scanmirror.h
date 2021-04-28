@@ -4,9 +4,9 @@
 #include <stdint.h>
 
 typedef struct Mirror {
-    uint8_t FREQ_PIN;
-    uint8_t ENABLE_PIN;
-    uint8_t ATSPEED_PIN;
+    int8_t FREQ_PIN;
+    int8_t ENABLE_PIN;
+    int8_t ATSPEED_PIN;
 } mirror_t;
 
 //Pass a configured mirror_t struct. 

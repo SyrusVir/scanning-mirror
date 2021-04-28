@@ -11,30 +11,39 @@ int mirrorConfig(mirror_t m) {
         return status;
     }
 
-    status = gpioSetMode(m.ENABLE_PIN, PI_OUTPUT);
-    if (status < 0) {
-        printf(err_msg, status, "gpioSetMode(m.ENABLE_PIN)");
-        return status;
-    }
-
-    status = gpioSetMode(m.ATSPEED_PIN, PI_INPUT);
-    if (status < 0) {
-        printf(err_msg, status, "gpioSetMode(m.ATSPEED_PIN)");
-        return status;
+    if (m.ENABLE_PIN >= 0)
+    {
+        status = gpioSetMode(m.ENABLE_PIN, PI_OUTPUT);
+        if (status < 0) {
+            printf(err_msg, status, "gpioSetMode(m.ENABLE_PIN)");
+            return status;
+        }
     }
     
-    status = gpioSetPullUpDown(m.ATSPEED_PIN, PI_PUD_UP);
-    if (status < 0) {
-        printf(err_msg, status, "gpioSetPullUpDown(m.ATSPEED_PIN, PI_PUD_UP)");
-        return status;
+    if (m.ATSPEED_PIN >= 0)
+    {
+        status = gpioSetMode(m.ATSPEED_PIN, PI_INPUT);
+        if (status < 0) {
+            printf(err_msg, status, "gpioSetMode(m.ATSPEED_PIN)");
+            return status;
+        }
+        
+        status = gpioSetPullUpDown(m.ATSPEED_PIN, PI_PUD_UP);
+        if (status < 0) {
+            printf(err_msg, status, "gpioSetPullUpDown(m.ATSPEED_PIN, PI_PUD_UP)");
+            return status;
+        }
     }
 
-    status = gpioSetMode(m.FREQ_PIN, PI_ALT5);
-    if (status < 0) {
-        printf(err_msg, status, "gpioSetMode(m.FREQ_PIN, PI_ALT5)");
-        return status;
+    if (m.FREQ_PIN >= 0)
+    {
+        status = gpioSetMode(m.FREQ_PIN, PI_ALT5);
+        if (status < 0) {
+            printf(err_msg, status, "gpioSetMode(m.FREQ_PIN, PI_ALT5)");
+            return status;
+        }
     }
-
+    
     return 0;
 }
 
